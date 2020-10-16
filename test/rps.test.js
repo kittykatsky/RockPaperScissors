@@ -32,7 +32,7 @@ contract('RPS', function(accounts) {
 
     beforeEach('Setup new RPS before each test', async function () {
         RPS = await RockPaperScissors.new(false, cost, {from: aliceAccount});
-        gameId = await RPS.generateGameId(secret, 'ROCK', {from: player1})
+        gameId = await RPS.generateGameId(secret, 1, {from: player1})
         trx = await RPS.newGame(gameId, 50, {from: player1, value: wager});
         snapshotId = (await timeMachine.takeSnapshot())['result'];
     });
@@ -64,7 +64,7 @@ contract('RPS', function(accounts) {
 
         it("Should no be possible to run a killed contract", async function () {
             await RPS.pause({from: aliceAccount});
-            return expect(RPS.playGame(gameId, 'PAPER', {from: player1})).to.be.rejected;
+            return expect(RPS.playGame(gameId, 2, {from: player1})).to.be.rejected;
         });
 
         it("Should not be possible to unpause a killed contract", async function () {
@@ -94,7 +94,7 @@ contract('RPS', function(accounts) {
             done(new Error("Write test"));
         });
 
-        it("Should not be possible to join a game if not providing a minimum stake", async function () {
+        it("Should not be possible to join a game if not providing a minimum stake", async function (done) {
             done(new Error("Write test"));
         });
 
