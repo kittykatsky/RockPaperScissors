@@ -21,7 +21,7 @@ require("dotenv").config({path: "./.env"});
 
 contract('RPS', function(accounts) {
 
-    let RPS, trx, snapshotId;
+    let RPS, snapshotId;
     const [aliceAccount, bobAccount, carolAccount] = accounts;
 
     const player1 = bobAccount;
@@ -33,7 +33,7 @@ contract('RPS', function(accounts) {
     beforeEach('Setup new RPS before each test', async function () {
         RPS = await RockPaperScissors.new(false, cost, {from: aliceAccount});
         gameId = await RPS.generateGameId(secret, 1, {from: player1})
-        trx = await RPS.newGame(gameId, 50, {from: player1, value: wager});
+        newGame = await RPS.newGame(gameId, 50, {from: player1, value: wager});
         snapshotId = (await timeMachine.takeSnapshot())['result'];
     });
 
@@ -53,7 +53,8 @@ contract('RPS', function(accounts) {
 
         it("Should not be possible to host a game when paused", async function () {
             await RPS.pause({from: aliceAccount})
-            return expect(RPS.newGame(player2, {from: player1, value: wager})).to.be.rejected;
+            const gameId2 = await RPS.generateGameId(secret, 2, {from: player1})
+            return expect(RPS.newGame(gameId2, 50, {from: player1, value: wager})).to.be.rejected;
         });
 
         it("Should be possible to kill a paused contract", async function () {
@@ -62,9 +63,10 @@ contract('RPS', function(accounts) {
             return assert.strictEqual(tx.receipt.status, true);
         });
 
-        it("Should no be possible to run a killed contract", async function () {
+        it("Should not be possible to run a killed contract", async function () {
             await RPS.pause({from: aliceAccount});
-            return expect(RPS.playGame(gameId, 2, {from: player1})).to.be.rejected;
+            const gameId2 = await RPS.generateGameId(secret, 2, {from: player1})
+            return expect(RPS.newGame(gameId2, 50, {from: player1, value: wager})).to.be.rejected;
         });
 
         it("Should not be possible to unpause a killed contract", async function () {
@@ -86,32 +88,41 @@ contract('RPS', function(accounts) {
 
     describe('Play game', function () {
 
-        it("Should not be possible to host a game when one is ongoing", async function (done) {
-            done(new Error("Write test"));
+        it("Should not be possible to rehost a running game", async function () {
+            return expect(RPS.newGame(gameId, 50, {from: player1, value: wager})).to.be.rejected;
         });
 
-        it("Should be possible to join a hosted game", async function (done) {
-            done(new Error("Write test"));
+        it("Should be possible to join a hosted game", async function () {
+            return expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
         });
 
-        it("Should not be possible to join a game if not providing a minimum stake", async function (done) {
-            done(new Error("Write test"));
+        it("Should not be possible ito join a full game", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            return expect(RPS.joinGame(gameId, {from: aliceAccount, value: wager})).to.be.rejected;
         });
 
-        it("Should not be possible to join a game in progress", async function (done) {
-            done(new Error("Write test"));
+        it("Should not be possible to join a game if not providing a minimum stake", async function () {
+            return expect(RPS.joinGame(gameId, {from: player2, value: 4000})).to.be.rejected;
         });
 
-        it("Should not be possible to submit a move if not part of the game", async function (done) {
-            done(new Error("Write test"));
+        it("Should not be possible to join a game in progress", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            return expect(RPS.joinGame(gameId, 50, {from: player2})).to.be.rejected;
         });
 
-        it("Should be possible to submit a move", async function (done) {
-            done(new Error("Write test"));
+        it("Should not be possible to submit a move if not part of the game", async function () {
+            return expect(RPS.submitMove(gameId, 2, {from: player2, value: wager})).to.be.rejected;
         });
 
-        it("Should not be possible to submit a second move", async function (done) {
-            done(new Error("Write test"));
+        it("Should be possible to submit a move", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            return expect(RPS.submitMove(gameId, 2, {from: player2})).to.be.fulfilled;
+        });
+
+        it("Should not be possible to submit a second move", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            expect(RPS.submitMove(gameId, 2, {from: player2})).to.be.fulfilled;
+            return expect(RPS.submitMove(gameId, 3, {from: player2})).to.be.rejected;
         });
     });
 
