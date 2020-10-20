@@ -126,6 +126,42 @@ contract('RPS', function(accounts) {
         });
     });
 
+    describe('event logic', function () {
+        it("Should be possible to verify that a new game has been create", async function () {
+            const gameId2 = await RPS.generateGameId(secret, 2, {from: player1})
+            const trx = await RPS.newGame(gameId2, 50, {from: player1, value: wager});
+
+            truffleAssert.eventEmitted(trx, 'LogNewGame', (ev) => {
+                return ev.gameId === gameId2 && ev.host === player1 && ev.wager.toString() === '5000'
+            });
+        });
+
+        it("Should be possible to verify that a player has joined a game", async function () {
+            const trx = await RPS.joinGame(gameId, {from: player2, value: wager});
+
+            truffleAssert.eventEmitted(trx, 'LogPlayerJoined', (ev) => {
+                return ev.gameId === gameId && ev.player === player2 && ev.wager.toString() === '4000'
+            });
+        });
+
+        it("Should be possible to verify that the game fee has been payed", async function () {
+            const trx = await RPS.joinGame(gameId, {from: player2, value: wager});
+
+            truffleAssert.eventEmitted(trx, 'LogFeePaid', (ev) => {
+                return ev.gameId === gameId && ev.player === player2 && ev.wager.toString() === '4000' && ev.fee.toString() === '1000'
+            });
+        });
+
+        it("Should be possible to verify that a player has sumbitted a move", async function () {
+            await RPS.joinGame(gameId, {from: player2, value: wager});
+            const trx = await RPS.submitMove(gameId, 2, {from: player2});
+
+            truffleAssert.eventEmitted(trx, 'LogPlayerMoved', (ev) => {
+                return ev.gameId === gameId && ev.player === player2
+            });
+        });
+    });
+
     describe('Game logic', function () {
         it("Should time out and return funds to host if player 2" +
             "doesnt make a move before a given amount of time", async function (done) {
