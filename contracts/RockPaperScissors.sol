@@ -34,7 +34,7 @@ contract RockPaperScissors is Pausable {
     event LogPlayerJoined(bytes32 indexed gameId, address indexed player, uint wager);
     event LogFeePaid(bytes32 indexed gameId, address indexed player, uint wager, uint fee);
     event LogPlayerMoved(bytes32 indexed gameId, address indexed player);
-    event LogPlayerRevealedMove(bytes32 indexed gameId, address indexed player, Moves move);
+    event LogPlayerRevealedMove(bytes32 indexed gameId, address indexed player, uint time);
     event LogGameOutcome(
         bytes32 indexed gameId, 
         address indexed host, 
@@ -42,12 +42,20 @@ contract RockPaperScissors is Pausable {
         gameOutcome outcome, 
         uint price
     );
+    event LogWithdrawEvent(address indexed withdrawAddress, uint amount, uint time);
 
     constructor(bool pauseState, uint fee)
         Pausable(pauseState)
         public
     {
         gameFee = fee;
+        /// forfeit state
+        outcomes[Moves.NONE][Moves.ROCK] = gameOutcome.PLAYER_WIN;
+        outcomes[Moves.NONE][Moves.PAPER] = gameOutcome.PLAYER_WIN;
+        outcomes[Moves.NONE][Moves.PAPER] = gameOutcome.PLAYER_WIN;
+        outcomes[Moves.ROCK][Moves.NONE] = gameOutcome.HOST_WIN;
+        outcomes[Moves.PAPER][Moves.NONE] = gameOutcome.HOST_WIN;
+        outcomes[Moves.PAPER][Moves.NONE] = gameOutcome.HOST_WIN;
         /// draw state
         outcomes[Moves.ROCK][Moves.ROCK] = gameOutcome.DRAW;
         outcomes[Moves.PAPER][Moves.PAPER] = gameOutcome.DRAW;
@@ -65,9 +73,9 @@ contract RockPaperScissors is Pausable {
     modifier validMove(Moves move)
     {
         require(
-            (move != Moves.ROCK) ||
-            (move != Moves.PAPER) ||
-            (move != Moves.SCISSORS),
+            (move == Moves.ROCK) ||
+            (move == Moves.PAPER) ||
+            (move == Moves.SCISSORS),
             'Invalid move'
         );
         _;
@@ -126,14 +134,14 @@ contract RockPaperScissors is Pausable {
         balances[contractOwner] = balances[contractOwner].add(gameFee);
     }
 
-    function submitMove(bytes32 _gameId, bytes32 move)
+    function submitMove(bytes32 _gameId, bytes32 secretMove)
         whenRunning
         external
     {
         require(games[_gameId].deadline > now, 'Game has expired');
         require(games[_gameId].player == msg.sender, 'You havent joined this game!');
         require(games[_gameId].hiddenPlayerMove == '', 'Youve already submitted a move');
-        games[_gameId].hiddenPlayerMove = move;
+        games[_gameId].hiddenPlayerMove = secretMove;
         emit LogPlayerMoved(_gameId, msg.sender);
     }
 
@@ -142,6 +150,7 @@ contract RockPaperScissors is Pausable {
         validMove(move)
         external
     {
+        require(games[gameId].hiddenPlayerMove != '', 'Player hasnt submitted a move');
         require(games[gameId].revealDeadline == 0 || now < games[gameId].revealDeadline, 'times up!');
 		if (msg.sender == games[gameId].host) {
             require(gameId == checkMove(secret, move, msg.sender), 'incorrect move');
@@ -153,27 +162,30 @@ contract RockPaperScissors is Pausable {
             revert();
         }
 
-        if (games[gameId].hostMove == Moves.NONE && games[gameId].playerMove == Moves.NONE){
-            games[gameId].revealDeadline == REVEAL_TIMER + now;
+        if (games[gameId].hostMove == Moves.NONE || games[gameId].playerMove == Moves.NONE){
+            uint timeLeftToReveal = REVEAL_TIMER + now;
+            games[gameId].revealDeadline = timeLeftToReveal;
         }
 
+        emit LogPlayerRevealedMove(gameId, msg.sender, now);
     }
 
     function playGame(bytes32 _gameId)
         whenRunning
         external
     {   
+        uint revealTimeCheck = games[_gameId].revealDeadline;
+        require(revealTimeCheck != 0, 'Game not started');
+        require(now > revealTimeCheck, 'Still time to play!');
         Moves hostMove = games[_gameId].hostMove;
         Moves playerMove = games[_gameId].playerMove;
         address player = games[_gameId].player; 
         address host = games[_gameId].host; 
         uint wager = games[_gameId].wager;
         require(player != address(0x0), 'Additional player needed');
-        require(games[_gameId].deadline > now, 'Game has expired');
-        require(hostMove != Moves.NONE && playerMove != Moves.NONE, 'Both moves not revealed');
 
         gameOutcome outcome = outcomes[hostMove][playerMove];
-        emit LogGameOutcome(_gameId, outcome, host, player, wager);
+        emit LogGameOutcome(_gameId, host, player, outcome, wager);
         if (outcome == gameOutcome.DRAW){
             uint payout = wager.div(2);
             balances[host] = balances[host].add(payout);  
@@ -185,6 +197,7 @@ contract RockPaperScissors is Pausable {
         } else {
             revert();
         }
+
     }
 
     function withdrawFunds()
