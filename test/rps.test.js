@@ -26,7 +26,8 @@ contract('RPS', function(accounts) {
 
     const player1 = bobAccount;
     const player2 = carolAccount;
-    const secret = fromAscii('test');
+    const secret = fromAscii('hello');
+    const secret2 = fromAscii('world');
     const cost = 1000;
     const wager = 5000;
 
@@ -111,19 +112,131 @@ contract('RPS', function(accounts) {
         });
 
         it("Should not be possible to submit a move if not part of the game", async function () {
-            return expect(RPS.submitMove(gameId, 2, {from: player2, value: wager})).to.be.rejected;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            return expect(RPS.submitMove(gameId, playerSecretMove, {from: player2, value: wager})).to.be.rejected;
         });
 
         it("Should be possible to submit a move", async function () {
             expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
-            return expect(RPS.submitMove(gameId, 2, {from: player2})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            return expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+        });
+
+        it("Should not be possible to submit a invalid move", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            return expect(RPS.generateGameId(secret2, 0, {from: player2})).to.be.rejected;
         });
 
         it("Should not be possible to submit a second move", async function () {
             expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
-            expect(RPS.submitMove(gameId, 2, {from: player2})).to.be.fulfilled;
-            return expect(RPS.submitMove(gameId, 3, {from: player2})).to.be.rejected;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            const playerSecretMove2 = await RPS.generateGameId(secret2, 3, {from: player2})
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            return expect(RPS.submitMove(gameId, playerSecretMove2, {from: player2})).to.be.rejected;
         });
+
+        it("Should not be possible to reveal your move before both moves have been submitted", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.rejected;
+        });
+
+        it("Should be possible to reveal your move", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.fulfilled;
+            return expect(RPS.revealMove(gameId, secret2, 2, {from: player2})).to.be.fulfilled;
+        });
+
+        it("Should not be possible to lie about your move", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2});
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            return expect(RPS.revealMove(gameId, secret, 3, {from: player1})).to.be.rejected;
+        });
+
+        it("Should not be possible for the other player to reveal their move " +
+            "5 minutes after the inital move was revealed", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.fulfilled;
+            await timeMachine.advanceTimeAndBlock(500);
+            return expect(RPS.revealMove(gameId, secret2, 2, {from: player2})).to.be.rejected;
+        });
+
+
+        it("Should be possible to play the game", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.fulfilled;
+            return expect(RPS.revealMove(gameId, secret2, 2, {from: player2})).to.be.fulfilled;
+        });
+
+        it("Should give add the wager to the winners balance", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            let winnerBalance = await RPS.balances(player2);
+            let loserBalance = await RPS.balances(player1);
+            assert.strictEqual(winnerBalance.toString(), '0');
+            assert.strictEqual(loserBalance.toString(), '0');
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret2, 2, {from: player2})).to.be.fulfilled;
+
+            await timeMachine.advanceTimeAndBlock(500);
+            await RPS.playGame(gameId);
+
+            winnerBalance = await RPS.balances(player2);
+            loserBalance = await RPS.balances(player1);
+            expectedAmount = new BN(wager.toString()).mul(new BN('2')).sub(new BN(cost.toString()));
+            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
+            return assert.strictEqual(loserBalance.toString(), '0');
+        });
+
+        it("Should split the wager between the players in the case of draw", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 1, {from: player2})
+            let winnerBalance = await RPS.balances(player2);
+            let loserBalance = await RPS.balances(player1);
+            assert.strictEqual(winnerBalance.toString(), '0');
+            assert.strictEqual(loserBalance.toString(), '0');
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret, 1, {from: player1})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret2, 1, {from: player2})).to.be.fulfilled;
+
+            await timeMachine.advanceTimeAndBlock(500);
+            await RPS.playGame(gameId);
+
+            winnerBalance = await RPS.balances(player2);
+            loserBalance = await RPS.balances(player1);
+            expectedAmount = new BN(wager.toString()).sub(new BN(cost.toString()).div(new BN('2')));
+            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
+            return assert.strictEqual(loserBalance.toString(), expectedAmount.toString());
+        });
+
+        it("Should give the wager to the player who submitted the move in the " +
+            "case of a forfeit (other player didnt sumbit move in time)", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            let winnerBalance = await RPS.balances(player2);
+            let loserBalance = await RPS.balances(player1);
+            assert.strictEqual(winnerBalance.toString(), '0');
+            assert.strictEqual(loserBalance.toString(), '0');
+            expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
+            expect(RPS.revealMove(gameId, secret2, 2, {from: player2})).to.be.fulfilled;
+
+            await timeMachine.advanceTimeAndBlock(500);
+            await RPS.playGame(gameId);
+
+            winnerBalance = await RPS.balances(player2);
+            loserBalance = await RPS.balances(player1);
+            expectedAmount = new BN(wager.toString()).mul(new BN('2')).sub(new BN(cost.toString()));
+            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
+            return assert.strictEqual(loserBalance.toString(), '0');
+        });
+
     });
 
     describe('event logic', function () {
@@ -148,31 +261,57 @@ contract('RPS', function(accounts) {
             const trx = await RPS.joinGame(gameId, {from: player2, value: wager});
 
             truffleAssert.eventEmitted(trx, 'LogFeePaid', (ev) => {
-                return ev.gameId === gameId && ev.player === player2 && ev.wager.toString() === '4000' && ev.fee.toString() === '1000'
+                return ev.gameId === gameId
+                    && ev.player === player2
+                    && ev.wager.toString() === '4000'
+                    && ev.fee.toString() === '1000'
             });
         });
 
         it("Should be possible to verify that a player has sumbitted a move", async function () {
             await RPS.joinGame(gameId, {from: player2, value: wager});
-            const trx = await RPS.submitMove(gameId, 2, {from: player2});
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            const trx = await RPS.submitMove(gameId, playerSecretMove, {from: player2});
 
             truffleAssert.eventEmitted(trx, 'LogPlayerMoved', (ev) => {
                 return ev.gameId === gameId && ev.player === player2
             });
         });
+
+        it("Should be possible to verify the outcome of a game", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            const playerSecretMove = await RPS.generateGameId(secret2, 2, {from: player2})
+            await RPS.submitMove(gameId, playerSecretMove, {from: player2});
+            await RPS.revealMove(gameId, secret2, 2, {from: player2});
+
+            await timeMachine.advanceTimeAndBlock(500);
+            const trx = await RPS.playGame(gameId);
+
+            truffleAssert.eventEmitted(trx, 'LogGameOutcome', (ev) => {
+                return ev.gameId === gameId
+                    && ev.host === player1
+                    && ev.player === player2
+                    && ev.outcome.toString() === '2'
+                    && ev.price.toString() === '9000'
+            });
+        });
     });
 
-    describe('Game logic', function () {
-        it("Should time out and return funds to host if player 2" +
-            "doesnt make a move before a given amount of time", async function (done) {
+    describe('other logic', function () {
+
+        it("Should allow user to bet their previous winnings", async function (done) {
             done(new Error("Write test"));
         });
 
-        it("Should add the total amount (minus fees) to the winner", async function (done) {
+        it("Should allow user to withdraw their winnings", async function (done) {
             done(new Error("Write test"));
         });
 
-        it("Should allow user to be their previous winnings", async function (done) {
+        it("Should be able to cancel game if player doesnt join before deadline", async function (done) {
+            done(new Error("Write test"));
+        });
+
+        it("Should be able to cancel game if player doesnt submit move before deadline", async function (done) {
             done(new Error("Write test"));
         });
     });
