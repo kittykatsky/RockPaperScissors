@@ -81,12 +81,6 @@ contract RockPaperScissors is Pausable {
         _;
     }
 
-    modifier onlyHost(bytes32 gameId, address caller)
-    {
-        require(msg.sender == games[gameId].host, 'Host only');
-        _;
-    }
-
     function generateGameId(bytes32 secret, Moves move)
         public
         validMove(move)
@@ -224,9 +218,9 @@ contract RockPaperScissors is Pausable {
 
     function cancelGame(bytes32 gameId)
         whenRunning
-        onlyHost(gameId, msg.sender)
         external
     {
+        require(msg.sender == games[gameId].host, 'Only host can cancel a game');
         require(now > games[gameId].deadline, 'deadline has not passed');
 
         address player = games[gameId].player; 
