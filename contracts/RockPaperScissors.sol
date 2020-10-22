@@ -87,12 +87,6 @@ contract RockPaperScissors is Pausable {
         _;
     }
 
-    modifier onlyPlayer(bytes32 gameId, address caller)
-    {
-        require(msg.sender == games[gameId].player, 'Player only');
-        _;
-    }
-
     function generateGameId(bytes32 secret, Moves move)
         public
         validMove(move)
@@ -159,7 +153,6 @@ contract RockPaperScissors is Pausable {
 
     function submitMove(bytes32 _gameId, bytes32 secretMove)
         whenRunning
-        onlyPlayer(_gameId, msg.sender)
         external
     {
         require(games[_gameId].deadline > now, 'Game has expired');

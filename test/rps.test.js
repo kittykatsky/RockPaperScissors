@@ -127,7 +127,7 @@ contract('RPS', function(accounts) {
             return expect(RPS.submitMove(gameId, playerSecretMove, {from: player2})).to.be.fulfilled;
         });
 
-        it("Shouldi not be possible to submit a move after the deadline has expired", async function () {
+        it("Should not be possible to submit a move after the deadline has expired", async function () {
             expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(5000);
 
@@ -407,6 +407,12 @@ contract('RPS', function(accounts) {
 
             hostBalance = await RPS.balances(player1);
             assert.strictEqual(hostBalance.toString(), wager.toString());
+        });
+
+        it("Should no be possible for the other player to cancel the game", async function () {
+            expect(RPS.joinGame(gameId, {from: player2, value: wager})).to.be.fulfilled;
+            await timeMachine.advanceTimeAndBlock(5005);
+            expect(RPS.cancelGame(gameId, {from: player2})).to.be.rejected;
         });
 
         it("Should be able to cancel game if player doesnt submit move before deadline", async function () {
