@@ -256,7 +256,7 @@ contract RockPaperScissors is Pausable {
         
         delete games[gameId];
 
-        balances[msg.sender] = balances[msg.sender] + payout;
+        balances[msg.sender] = balances[msg.sender].add(payout);
 
         emit LogGameCanceled(gameId, msg.sender, player);
     }
@@ -279,7 +279,7 @@ contract RockPaperScissors is Pausable {
         games[gameId].playerMove = Moves.NONE;
         games[gameId].wager = 0;
 
-        balances[msg.sender] = balances[msg.sender] + payout;
+        balances[msg.sender] = balances[msg.sender].add(payout);
         
         emit LogHostIsASoreLoser(gameId, host, msg.sender, payout);
     }
