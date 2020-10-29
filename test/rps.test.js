@@ -21,7 +21,7 @@ require("dotenv").config({path: "./.env"});
 
 contract('RPS', function(accounts) {
 
-    let RPS, snapshotId;
+    let RPS, gameId, newGame, snapshotId;
     const [aliceAccount, bobAccount, carolAccount] = accounts;
 
     const player1 = bobAccount;
@@ -106,7 +106,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should not be possible to join a second time", async function () {
-            expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
             return expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.rejected;
         });
 
@@ -134,43 +134,43 @@ contract('RPS', function(accounts) {
 
         it("Should add the wager to the winners balance", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
-            let winnerBalance = await RPS.balances(player2);
-            let loserBalance = await RPS.balances(player1);
-            assert.strictEqual(winnerBalance.toString(), '0');
-            assert.strictEqual(loserBalance.toString(), '0');
+            const winnerBalanceBefore = await RPS.balances(player2);
+            const loserBalanceBefore = await RPS.balances(player1);
+            assert.strictEqual(winnerBalanceBefore.toString(), '0');
+            assert.strictEqual(loserBalanceBefore.toString(), '0');
 
             await RPS.playGame(secret, 2, {from: player1});
 
-            winnerBalance = await RPS.balances(player2);
-            loserBalance = await RPS.balances(player1);
+            const winnerBalanceAfter = await RPS.balances(player2);
+            const loserBalanceAfter = await RPS.balances(player1);
             expectedAmount = new BN(wager.toString()).mul(new BN('2'));
-            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
-            return assert.strictEqual(loserBalance.toString(), '0');
+            assert.strictEqual(winnerBalanceAfter.toString(), expectedAmount.toString());
+            return assert.strictEqual(loserBalanceAfter.toString(), '0');
         });
 
         it("Should split the wager between the players in the case of draw", async function () {
             expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
-            let winnerBalance = await RPS.balances(player2);
-            let loserBalance = await RPS.balances(player1);
-            assert.strictEqual(winnerBalance.toString(), '0');
-            assert.strictEqual(loserBalance.toString(), '0');
+            const winnerBalanceBefore = await RPS.balances(player2);
+            const loserBalanceBefore = await RPS.balances(player1);
+            assert.strictEqual(winnerBalanceBefore.toString(), '0');
+            assert.strictEqual(loserBalanceBefore.toString(), '0');
 
             await RPS.playGame(secret, 2, {from: player1});
 
-            winnerBalance = await RPS.balances(player2);
-            loserBalance = await RPS.balances(player1);
+            const winnerBalanceAfter = await RPS.balances(player2);
+            const loserBalanceAfter = await RPS.balances(player1);
             expectedAmount = new BN(wager.toString());
 
-            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
-            return assert.strictEqual(loserBalance.toString(), expectedAmount.toString());
+            assert.strictEqual(winnerBalanceAfter.toString(), expectedAmount.toString());
+            return assert.strictEqual(loserBalanceAfter.toString(), expectedAmount.toString());
         });
 
         it("Should pay the game fees to the contract owner", async function () {
-            let hostBalance = await RPS.balances(player3);
-            assert.strictEqual(hostBalance.toString(), '1000');
+            const hostBalanceBefore = await RPS.balances(player3);
+            assert.strictEqual(hostBalanceBefore.toString(), '1000');
             expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
-            hostBalance = await RPS.balances(player3);
-            return assert.strictEqual(hostBalance.toString(), '2000');
+            const hostBalanceAfter = await RPS.balances(player3);
+            return assert.strictEqual(hostBalanceAfter.toString(), '2000');
         });
     });
 
@@ -241,7 +241,7 @@ contract('RPS', function(accounts) {
 
         it("Shoud be possible to verify that a game has been canceled", async function () {
             await timeMachine.advanceTimeAndBlock(5005);
-            const trx = await RPS.cancelGame(gameId, secret, 2, {from: player1});
+            const trx = await RPS.cancelGame(gameId, {from: player1});
 
             truffleAssert.eventEmitted(trx, 'LogGameCanceled', (ev) => {
                 return ev.gameId === gameId
@@ -253,7 +253,7 @@ contract('RPS', function(accounts) {
         it("Should be possible to verify that the host is a sore loser", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(605);
-            const trx = await RPS.soreLoser(gameId, player1, {from: player2});
+            const trx = await RPS.soreLoser(gameId, {from: player2});
 
             truffleAssert.eventEmitted(trx, 'LogHostIsASoreLoser', (ev) => {
                 return ev.gameId === gameId
@@ -269,18 +269,18 @@ contract('RPS', function(accounts) {
         it("Should allow user to bet their previous winnings", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
 
-            let winnerBalance = await RPS.balances(player2);
-            let loserBalance = await RPS.balances(player1);
-            assert.strictEqual(winnerBalance.toString(), '0');
-            assert.strictEqual(loserBalance.toString(), '0');
+            const winnerBalanceBefore = await RPS.balances(player2);
+            const loserBalanceBefore = await RPS.balances(player1);
+            assert.strictEqual(winnerBalanceBefore.toString(), '0');
+            assert.strictEqual(loserBalanceBefore.toString(), '0');
 
             await RPS.playGame(secret, 2, {from: player1});
 
-            winnerBalance = await RPS.balances(player2);
-            loserBalance = await RPS.balances(player1);
+            const winnerBalanceAfter = await RPS.balances(player2);
+            const loserBalanceAfter = await RPS.balances(player1);
             expectedAmount = new BN(wager.toString()).mul(new BN('2'));
-            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
-            assert.strictEqual(loserBalance.toString(), '0');
+            assert.strictEqual(winnerBalanceAfter.toString(), expectedAmount.toString());
+            assert.strictEqual(loserBalanceAfter.toString(), '0');
 
             const gameId2 = await RPS.generateGameId(secret, 3, {from: player2})
             expect(RPS.newGame(gameId2, player2, 5000, wager, {from: player1, value: bet})).to.be.fulfilled;
@@ -289,36 +289,34 @@ contract('RPS', function(accounts) {
 
         it("Should allow the user to host a game with previous winnings", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
-            let winnerBalance = await RPS.balances(player2);
-            let loserBalance = await RPS.balances(player1);
-            assert.strictEqual(winnerBalance.toString(), '0');
-            assert.strictEqual(loserBalance.toString(), '0');
+
+            const winnerBalanceBefore = await RPS.balances(player2);
+            const loserBalanceBefore = await RPS.balances(player1);
 
             await RPS.playGame(secret, 2, {from: player1});
 
-            winnerBalance = await RPS.balances(player2);
-            loserBalance = await RPS.balances(player1);
+            const winnerBalanceAfter = await RPS.balances(player2);
+            const loserBalanceAfter = await RPS.balances(player1);
             expectedAmount = new BN(wager.toString()).mul(new BN('2'));
-            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
-            assert.strictEqual(loserBalance.toString(), '0');
+            assert.strictEqual(winnerBalanceAfter.toString(), expectedAmount.toString());
+            assert.strictEqual(loserBalanceAfter.toString(), '0');
             const gameId2 = await RPS.generateGameId(secret, 3, {from: player2})
             return expect(RPS.newGame(gameId2, player1, 5000, wager, {from: player2, value:1000})).to.be.fulfilled;
         });
 
         it("Should allow user to withdraw their winnings", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
-            let winnerBalance = await RPS.balances(player2);
-            let loserBalance = await RPS.balances(player1);
-            assert.strictEqual(winnerBalance.toString(), '0');
-            assert.strictEqual(loserBalance.toString(), '0');
+
+            const winnerBalanceBefore = await RPS.balances(player2);
+            const loserBalanceBefore = await RPS.balances(player1);
 
             await RPS.playGame(secret, 2, {from: player1});
 
-            winnerBalance = await RPS.balances(player2);
-            loserBalance = await RPS.balances(player1);
+            const winnerBalanceAfter = await RPS.balances(player2);
+            const loserBalanceAfter = await RPS.balances(player1);
             expectedAmount = new BN(wager.toString()).mul(new BN('2'));
-            assert.strictEqual(winnerBalance.toString(), expectedAmount.toString());
-            assert.strictEqual(loserBalance.toString(), '0');
+            assert.strictEqual(winnerBalanceAfter.toString(), expectedAmount.toString());
+            assert.strictEqual(loserBalanceAfter.toString(), '0');
 
             const winnerExpectedBalance = toBN(await web3.eth.getBalance(player2)).add(new BN('9000'));
 
@@ -338,36 +336,42 @@ contract('RPS', function(accounts) {
 
         it("Should be able to cancel game if player doesnt join before deadline", async function () {
             hostBalance = await RPS.balances(player1);
-            assert.strictEqual(hostBalance.toString(), '0');
 
             await timeMachine.advanceTimeAndBlock(5005);
-            expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.fulfilled;
+            expect(RPS.cancelGame(gameId, {from: player1})).to.be.fulfilled;
 
             hostBalance = await RPS.balances(player1);
-            assert.strictEqual(hostBalance.toString(), wager.toString());
+            return assert.strictEqual(hostBalance.toString(), wager.toString());
         });
 
         it("Should no be possible for the other player to cancel the game", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(5005);
-            expect(RPS.cancelGame(gameId, secret, 2, {from: player2})).to.be.rejected;
+            return expect(RPS.cancelGame(gameId, secret, 2, {from: player2})).to.be.rejected;
         });
 
         it("Should not be able to cancel game if deadline hasnt passed", async function () {
-            expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.rejected;
+            return expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.rejected;
         });
 
         it("Should not be possible to cancel the game if the player has joined", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(5005);
-            expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.rejected;
+            return expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.rejected;
         });
 
         it("Should be possible for the 2nd player to finish the game if after 10 mins " +
             "the host hasn't done so", async function () {
             expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(605);
-            expect(RPS.soreLoser(gameId, player1, {from: player2})).fulfilled;
+            return expect(RPS.soreLoser(gameId, {from: player2})).fulfilled;
+        });
+
+        it("Should not be possible for another player to finish the game by calling " +
+            "sore loser", async function () {
+            expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
+            await timeMachine.advanceTimeAndBlock(605);
+            return expect(RPS.soreLoser(gameId, {from: player3})).rejected;
         });
     });
 });
