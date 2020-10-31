@@ -40,7 +40,7 @@ contract RockPaperScissors is Pausable {
     mapping(Moves => mapping(Moves => gameOutcome)) public outcomes;
 
     /// Events
-    event LogNewGame(
+    event LogGameStarted(
         bytes32 indexed gameId,
         address indexed host,
         address indexed secondPlayer,
@@ -55,15 +55,16 @@ contract RockPaperScissors is Pausable {
         uint cutoffTime
     );
     event LogFeePaid(bytes32 indexed gameId, address indexed player, uint wager, uint fee);
-    event LogGameOutcome(
+    event LogGameTest(Moves left, Moves right, gameOutcome expected, gameOutcome actual);
+    event LogGameFinished(
         bytes32 indexed gameId, 
         address indexed host, 
         address indexed player, 
         gameOutcome outcome, 
         uint price
     );
-    event LogDepositEvent(address indexed depositAddress, uint amount);
-    event LogWithdrawEvent(address indexed withdrawAddress, uint amount);
+    event LogBalanceDeposited(address indexed depositAddress, uint amount);
+    event LogBalanceWithdrawn(address indexed withdrawAddress, uint amount);
     event LogGameCanceled(bytes32 indexed gameId, address indexed host, address indexed player);
     event LogHostIsASoreLoser(
         bytes32 indexed gameId, 
@@ -106,27 +107,27 @@ contract RockPaperScissors is Pausable {
         payable
     {
         require(player != address(0x0) && player != msg.sender, 'Incorrect player specified');
-        require(gameId != '', 'Incorrect gameId provided');
+        require(gameId != bytes32(0), 'Incorrect gameId provided');
         require(games[gameId].deadline == 0, 'Game already hosted!');
         require(gameTime <= MAX_GAMETIME && gameTime >= MIN_GAMETIME, 
                 'A game cant run for less than 5 mins or longer than 24h');
         require(wager >= gameFee, 'below minimum wager sent');
 
         uint paid = msg.value.sub(gameFee);
+        uint hostBalance = balances[msg.sender]; 
         
-        require(paid == wager || balances[msg.sender].add(paid) >= wager, 'Not enough ether to host game');
+        require(paid == wager || hostBalance.add(paid) >= wager, 'Not enough ether to host game');
 
         // if sent amount if less than wager, withdraw missing amount from balances
         // if its more, deposit rest into balances
 
         if (paid != wager) {
-            uint hostBalance = balances[msg.sender];
             if (paid < wager) {
                 balances[msg.sender] = hostBalance.sub(wager.sub(paid)); 
-                emit LogWithdrawEvent(msg.sender, gameFee);
+                emit LogBalanceWithdrawn(msg.sender, gameFee);
             } else if (paid > wager) {
                 balances[msg.sender] = hostBalance.add(paid.sub(wager)); 
-                emit LogDepositEvent(msg.sender, gameFee);
+                emit LogBalanceDeposited(msg.sender, gameFee);
             }
         }
         
@@ -137,13 +138,13 @@ contract RockPaperScissors is Pausable {
         games[gameId].host = msg.sender; 
         games[gameId].player = player; 
         
-        emit LogNewGame(gameId, msg.sender, player, gameDeadline, wager, gameFee);
+        emit LogGameStarted(gameId, msg.sender, player, gameDeadline, wager, gameFee);
 
         address contractOwner = getOwner();
         balances[contractOwner] = balances[contractOwner].add(gameFee);
 
         emit LogFeePaid(gameId, msg.sender, paid, gameFee);
-        emit LogDepositEvent(msg.sender, gameFee);
+        emit LogBalanceDeposited(msg.sender, gameFee);
     }
 
     /// Allows second player to join the game
@@ -173,16 +174,15 @@ contract RockPaperScissors is Pausable {
             uint playerBalance = balances[msg.sender];
             if (paid < wager) {
                 balances[msg.sender] = playerBalance.sub(wager.sub(paid));
-                emit LogWithdrawEvent(msg.sender, gameFee);
+                emit LogBalanceWithdrawn(msg.sender, gameFee);
             } else if (paid > wager) {
                 balances[msg.sender] = playerBalance.add(paid.sub(wager));
-                emit LogDepositEvent(msg.sender, gameFee);
+                emit LogBalanceDeposited(msg.sender, gameFee);
             } 
         }
         
         uint newDeadline = now.add(PLAY_TIME);
         games[gameId].playerMove = move;
-        games[gameId].bet = wager.add(wager);
         games[gameId].deadline = newDeadline; 
 
         emit LogPlayerJoined(gameId, msg.sender, wager, newDeadline);
@@ -202,7 +202,7 @@ contract RockPaperScissors is Pausable {
         whenRunning
         external
     {   
-        bytes32 gameId = generateGameId(secret, hostMove);
+        bytes32 gameId = generateGameId(msg.sender, secret, hostMove);
         Moves playerMove = games[gameId].playerMove;
 
         require(playerMove != Moves.NONE, 'Player hasnt joined');
@@ -220,17 +220,23 @@ contract RockPaperScissors is Pausable {
         uint playerMoveCheck = uint(playerMove).mod(3);
 
         if (hostMoveCheck.mod(3) == playerMoveCheck) {
-            uint payout = wager.div(2);
-            balances[msg.sender] = balances[msg.sender].add(payout);  
-            balances[player] = balances[player].add(payout);  
-        } else if(hostMoveCheck == playerMoveCheck) {
             balances[msg.sender] = balances[msg.sender].add(wager);  
-            outcome = gameOutcome.HOST_WIN;
-        } else {
             balances[player] = balances[player].add(wager);  
-            outcome = gameOutcome.PLAYER_WIN;
+            emit LogBalanceDeposited(msg.sender, wager);
+            emit LogBalanceDeposited(player, wager);
+        } else {
+            wager = wager.mul(2);
+            if (hostMoveCheck == playerMoveCheck + 1) {
+                outcome = gameOutcome.HOST_WIN;
+                balances[msg.sender] = balances[msg.sender].add(wager);  
+                emit LogBalanceDeposited(msg.sender, wager);
+            } else {
+                outcome = gameOutcome.PLAYER_WIN;
+                balances[player] = balances[player].add(wager);  
+                emit LogBalanceDeposited(player, wager);
+            }
         }
-        emit LogGameOutcome(gameId, msg.sender, player, outcome, wager);
+        emit LogGameFinished(gameId, msg.sender, player, outcome, wager);
     }
 
     /// Cancel a hosted game
@@ -261,24 +267,34 @@ contract RockPaperScissors is Pausable {
 
     /// Use in case the host is a sore loser
     /// @param gameId unique id of a game
-    /// @dev 2nd player can claim victory if host
+    /// @dev anyone can resolve a game if the host
     /// doesnt resolve the game within 10 minutes
-    /// of the player joining
+    /// of a player joining. If someone resolves 
+    /// the game on behalf of the player they retain
+    /// a small fee to cover the costs
     function soreLoser(bytes32 gameId)
         whenRunning
-        onlyPlayer(gameId)
         external
     {
         require(games[gameId].playerMove != Moves.NONE, 'player needs to join game');
         require(now >= games[gameId].deadline, 'Host still has time to resolve the game');
-        uint payout = games[gameId].bet;
+        uint payout = games[gameId].bet.mul(2);
         address host = games[gameId].host;
+        address player = games[gameId].player;
 
         delete games[gameId];
 
-        balances[msg.sender] = balances[msg.sender].add(payout);
-        
-        emit LogHostIsASoreLoser(gameId, host, msg.sender, payout);
+        if (msg.sender != player) {
+            uint fee = payout.div(10);
+            payout = payout.sub(fee);
+            balances[msg.sender] = balances[msg.sender].add(fee);
+            emit LogBalanceDeposited(msg.sender, fee);
+        }
+
+        balances[player] = balances[player].add(payout);
+
+        emit LogBalanceDeposited(player, payout);
+        emit LogHostIsASoreLoser(gameId, host, player, payout);
     }
 
     /// Allows a player to withdraw their winnings
@@ -290,9 +306,41 @@ contract RockPaperScissors is Pausable {
         returns (bool _success)
     {
         balances[msg.sender] = balances[msg.sender].sub(amount, 'Not enough ETH available');
-        emit LogWithdrawEvent(msg.sender, amount);
+        emit LogBalanceWithdrawn(msg.sender, amount);
         (_success, ) = msg.sender.call{value: amount}("");
         require(_success, 'Transfer failed!');
+    }
+
+
+    /// Allows us to test the game logic
+    /// @param left left move
+    /// @param right right move
+    /// @param expectedOutcome expected result of game
+	/// @return _outcome true if the game logic matches the desired outcome
+    function testGameLogic(Moves left, Moves right, gameOutcome expectedOutcome)
+    public
+    view
+    returns (bool _outcome)
+    {
+        gameOutcome outcome = gameOutcome.DRAW;
+        uint leftMoveCheck = uint(left);
+        uint rightMoveCheck = uint(right).mod(3);
+
+        if (leftMoveCheck.mod(3) == rightMoveCheck) {
+        } else {
+            if (leftMoveCheck == rightMoveCheck + 1) {
+                outcome = gameOutcome.HOST_WIN;
+            } else {
+                outcome = gameOutcome.PLAYER_WIN;
+            }
+        }
+        if (outcome == expectedOutcome) {
+            _outcome = true;
+        }
+        else {
+            _outcome = false;
+        }
+        require(_outcome, 'incorrect outcome');
     }
 
     /// Generate a unique id for a game
@@ -302,12 +350,12 @@ contract RockPaperScissors is Pausable {
     /// the contract, the secret and move provided by the host
     /// this generates a unique id for the game
 	/// @return gameId a hash generated from the input paramaters
-    function generateGameId(bytes32 secret, Moves move)
+    function generateGameId(address host, bytes32 secret, Moves move)
         public
         validMove(move)
         view
         returns (bytes32 gameId)
     {
-        gameId = keccak256(abi.encodePacked(msg.sender, secret, move, address(this)));
+        gameId = keccak256(abi.encodePacked(host, secret, move, address(this)));
     }
 }
