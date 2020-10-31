@@ -55,7 +55,6 @@ contract RockPaperScissors is Pausable {
         uint cutoffTime
     );
     event LogFeePaid(bytes32 indexed gameId, address indexed player, uint wager, uint fee);
-    event LogGameTest(Moves left, Moves right, gameOutcome expected, gameOutcome actual);
     event LogGameFinished(
         bytes32 indexed gameId, 
         address indexed host, 
