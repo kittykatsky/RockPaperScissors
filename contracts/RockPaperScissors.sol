@@ -30,6 +30,8 @@ contract RockPaperScissors is Pausable {
        Moves playerMove;
        uint deadline;
        uint bet;
+       // Lets others finsih the game on the plyers behalf
+       bool openAdmin;
     }
 
     /// Holds players winnings
@@ -65,7 +67,7 @@ contract RockPaperScissors is Pausable {
     event LogBalanceDeposited(address indexed depositAddress, uint amount);
     event LogBalanceWithdrawn(address indexed withdrawAddress, uint amount);
     event LogGameCanceled(bytes32 indexed gameId, address indexed host, address indexed player);
-    event LogHostIsASoreLoser(
+    event LogSoreLoserUnmasked(
         bytes32 indexed gameId, 
         address indexed host, 
         address indexed player, 
@@ -113,15 +115,14 @@ contract RockPaperScissors is Pausable {
         require(wager >= gameFee, 'below minimum wager sent');
 
         uint paid = msg.value.sub(gameFee);
-        uint hostBalance = balances[msg.sender]; 
         
-        require(paid == wager || hostBalance.add(paid) >= wager, 'Not enough ether to host game');
-
         // if sent amount if less than wager, withdraw missing amount from balances
         // if its more, deposit rest into balances
 
         if (paid != wager) {
+            uint hostBalance = balances[msg.sender]; 
             if (paid < wager) {
+                require(hostBalance.add(paid) >= wager, 'Not enough ether to host game');
                 balances[msg.sender] = hostBalance.sub(wager.sub(paid)); 
                 emit LogBalanceWithdrawn(msg.sender, gameFee);
             } else if (paid > wager) {
@@ -152,7 +153,7 @@ contract RockPaperScissors is Pausable {
     /// @dev player can either send ether matching the wager + gameFee 
     /// or use previous winnings to join the game. Game fees
     /// are deducted at this point
-    function joinGame(bytes32 gameId, Moves move)
+    function joinGame(bytes32 gameId, Moves move, bool allowAdmin)
         whenRunning
         onlyPlayer(gameId)
         validMove(move)
@@ -163,7 +164,6 @@ contract RockPaperScissors is Pausable {
         uint paid = msg.value.sub(gameFee);
 
         require(games[gameId].playerMove == Moves.NONE, 'Already joined');
-        require(paid == wager|| balances[msg.sender].add(paid) >= wager, 'wager below minimum amount');
         require(games[gameId].deadline > now, 'Game has expired');
         
         // if sent amount if less than the wager, withdraw missing amount from balances
@@ -183,6 +183,7 @@ contract RockPaperScissors is Pausable {
         uint newDeadline = now.add(PLAY_TIME);
         games[gameId].playerMove = move;
         games[gameId].deadline = newDeadline; 
+        games[gameId].openAdmin = allowAdmin; 
 
         emit LogPlayerJoined(gameId, msg.sender, wager, newDeadline);
 
@@ -214,28 +215,21 @@ contract RockPaperScissors is Pausable {
         games[gameId].playerMove = Moves.NONE;
         games[gameId].bet = 0;
 
-        gameOutcome outcome = gameOutcome.DRAW;
-        uint hostMoveCheck = uint(hostMove);
-        uint playerMoveCheck = uint(playerMove).mod(3);
 
-        if (hostMoveCheck.mod(3) == playerMoveCheck) {
+        gameOutcome outcome = runGameLogic(hostMove, playerMove);
+        if (outcome == gameOutcome.DRAW) {
             balances[msg.sender] = balances[msg.sender].add(wager);  
             balances[player] = balances[player].add(wager);  
             emit LogBalanceDeposited(msg.sender, wager);
             emit LogBalanceDeposited(player, wager);
+        } else if (outcome == gameOutcome.HOST_WIN) {
+            balances[msg.sender] = balances[msg.sender].add(wager.mul(2));  
+            emit LogBalanceDeposited(msg.sender, wager.mul(2));
         } else {
-            wager = wager.mul(2);
-            if (hostMoveCheck == playerMoveCheck + 1) {
-                outcome = gameOutcome.HOST_WIN;
-                balances[msg.sender] = balances[msg.sender].add(wager);  
-                emit LogBalanceDeposited(msg.sender, wager);
-            } else {
-                outcome = gameOutcome.PLAYER_WIN;
-                balances[player] = balances[player].add(wager);  
-                emit LogBalanceDeposited(player, wager);
-            }
+            balances[player] = balances[player].add(wager.mul(2));  
+            emit LogBalanceDeposited(player, wager.mul(2));
         }
-        emit LogGameFinished(gameId, msg.sender, player, outcome, wager);
+        emit LogGameFinished(gameId, msg.sender, player, outcome, wager.mul(2));
     }
 
     /// Cancel a hosted game
@@ -277,6 +271,10 @@ contract RockPaperScissors is Pausable {
     {
         require(games[gameId].playerMove != Moves.NONE, 'player needs to join game');
         require(now >= games[gameId].deadline, 'Host still has time to resolve the game');
+        require(msg.sender != games[gameId].host, 'host can not resolve the game anymore'); 
+        if (!games[gameId].openAdmin) {
+             require(msg.sender == games[gameId].player, 'Only player can resolve the game');   
+        }
         uint payout = games[gameId].bet.mul(2);
         address host = games[gameId].host;
         address player = games[gameId].player;
@@ -293,7 +291,7 @@ contract RockPaperScissors is Pausable {
         balances[player] = balances[player].add(payout);
 
         emit LogBalanceDeposited(player, payout);
-        emit LogHostIsASoreLoser(gameId, host, player, payout);
+        emit LogSoreLoserUnmasked(gameId, host, player, payout);
     }
 
     /// Allows a player to withdraw their winnings
@@ -311,35 +309,27 @@ contract RockPaperScissors is Pausable {
     }
 
 
-    /// Allows us to test the game logic
+    /// run the game logic
     /// @param left left move
     /// @param right right move
-    /// @param expectedOutcome expected result of game
 	/// @return _outcome true if the game logic matches the desired outcome
-    function testGameLogic(Moves left, Moves right, gameOutcome expectedOutcome)
+    function runGameLogic(Moves left, Moves right)
     public
     view
-    returns (bool _outcome)
+    returns (gameOutcome _outcome)
     {
-        gameOutcome outcome = gameOutcome.DRAW;
         uint leftMoveCheck = uint(left);
         uint rightMoveCheck = uint(right).mod(3);
 
         if (leftMoveCheck.mod(3) == rightMoveCheck) {
         } else {
             if (leftMoveCheck == rightMoveCheck + 1) {
-                outcome = gameOutcome.HOST_WIN;
+                _outcome = gameOutcome.HOST_WIN;
             } else {
-                outcome = gameOutcome.PLAYER_WIN;
+                _outcome = gameOutcome.PLAYER_WIN;
             }
         }
-        if (outcome == expectedOutcome) {
-            _outcome = true;
-        }
-        else {
-            _outcome = false;
-        }
-        require(_outcome, 'incorrect outcome');
+        return _outcome;
     }
 
     /// Generate a unique id for a game
