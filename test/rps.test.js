@@ -33,7 +33,12 @@ contract('RPS', function(accounts) {
     const cost = 1000;
     const wager = 5000;
     const bet = 6000;
-
+    const rock = 1
+        , paper = 2
+        , scissors = 3
+    const draw = 0
+        , leftWin = 1
+        , rightWin = 2;
 
     beforeEach('Setup new RPS before each test', async function () {
         RPS = await RockPaperScissors.new(false, cost, {from: aliceAccount});
@@ -98,43 +103,43 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to join a hosted game", async function () {
-            return expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.fulfilled;
+            return expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
         });
 
         it("Should not be possible to join a hosted game after the deadline has expired", async function () {
             await timeMachine.advanceTimeAndBlock(5000);
-            return expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.rejected;
+            return expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.rejected;
         });
 
         it("Should not be possible to join a second time", async function () {
-            await expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.fulfilled;
-            return expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.rejected;
+            await expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
+            return expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.rejected;
         });
 
         it("Should not be possible to join a game if not providing a minimum stake", async function () {
-            return expect(RPS.joinGame(gameId, 2, false, {from: player2, value: 4000})).to.be.rejected;
+            return expect(RPS.joinGame(gameId, 2, {from: player2, value: 4000})).to.be.rejected;
         });
 
         it("Should not be possible to join if not part of the game", async function () {
-            return expect(RPS.joinGame(gameId, 2, false, {from: player3, value: bet})).to.be.rejected;
+            return expect(RPS.joinGame(gameId, 2, {from: player3, value: bet})).to.be.rejected;
         });
 
         it("Should not be possible to join with a invalid move", async function () {
-            return expect(RPS.joinGame(gameId, 0, false, {from: player3, value: bet})).to.be.rejected;
+            return expect(RPS.joinGame(gameId, 0, {from: player3, value: bet})).to.be.rejected;
         });
 
         it("Should not be possible to lie about your move", async function () {
-            expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             return expect(RPS.playGame(secret, 3, {from: player1})).to.be.rejected;
         });
 
         it("Should be possible to play the game", async function () {
-            expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             return await RPS.playGame(secret, 2, {from: player1});
         });
 
         it("Should add the wager to the winners balance", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             const winnerBalanceBefore = await RPS.balances(player2);
             const loserBalanceBefore = await RPS.balances(player1);
             assert.strictEqual(winnerBalanceBefore.toString(), '0');
@@ -150,7 +155,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should split the wager between the players in the case of draw", async function () {
-            await expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
 
             await RPS.playGame(secret, 2, {from: player1});
 
@@ -165,7 +170,7 @@ contract('RPS', function(accounts) {
         it("Should pay the game fees to the contract owner", async function () {
             const hostBalanceBefore = await RPS.balances(player3);
             assert.strictEqual(hostBalanceBefore.toString(), '1000');
-            expect(RPS.joinGame(gameId, 2, false, {from: player2, value: bet})).to.be.fulfilled;
+            expect(RPS.joinGame(gameId, 2, {from: player2, value: bet})).to.be.fulfilled;
             const hostBalanceAfter = await RPS.balances(player3);
             return assert.strictEqual(hostBalanceAfter.toString(), '2000');
         });
@@ -189,7 +194,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to verify that a player has joined a game", async function () {
-            const trx = await RPS.joinGame(gameId, 3, false, {from: player2, value: bet});
+            const trx = await RPS.joinGame(gameId, 3, {from: player2, value: bet});
             const block = await web3.eth.getBlock(trx.receipt.blockNumber);
             const setDeadline = block.timestamp + 600;
 
@@ -202,7 +207,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to verify that the game fee has been payed", async function () {
-            const trx = await RPS.joinGame(gameId, 3, false, {from: player2, value: bet});
+            const trx = await RPS.joinGame(gameId, 3, {from: player2, value: bet});
 
             truffleAssert.eventEmitted(trx, 'LogFeePaid', (ev) => {
                 return ev.gameId === gameId
@@ -213,7 +218,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to verify the outcome of a game", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             const trx = await RPS.playGame(secret, 2, {from: player1});
 
             truffleAssert.eventEmitted(trx, 'LogGameFinished', (ev) => {
@@ -226,7 +231,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to verify a player has withdraw funds", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await expect(RPS.playGame(secret, 2, {from: player1})).to.be.fulfilled;
             const trx = await RPS.withdrawFunds(9000, {from: player2});
 
@@ -248,7 +253,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should be possible to verify that the host is a sore loser", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(605);
             const trx = await RPS.soreLoser(gameId, {from: player2});
 
@@ -264,7 +269,7 @@ contract('RPS', function(accounts) {
     describe('other logic', function () {
 
         it("Should allow user to bet their previous winnings", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
 
             await RPS.playGame(secret, 2, {from: player1});
 
@@ -276,11 +281,11 @@ contract('RPS', function(accounts) {
 
             const gameId2 = await RPS.generateGameId(player2, secret, 3)
             expect(RPS.newGame(gameId2, player2, 5000, wager, {from: player1, value: bet})).to.be.fulfilled;
-            return expect(RPS.joinGame(gameId2, 2, false, {from: player2, value: 1000})).to.be.fulfilled;
+            return expect(RPS.joinGame(gameId2, 2, {from: player2, value: 1000})).to.be.fulfilled;
         });
 
         it("Should allow the user to host a game with previous winnings", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
 
             const winnerBalanceBefore = await RPS.balances(player2);
             const loserBalanceBefore = await RPS.balances(player1);
@@ -297,7 +302,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should allow user to withdraw their winnings", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await RPS.playGame(secret, 2, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
@@ -333,7 +338,7 @@ contract('RPS', function(accounts) {
         });
 
         it("Should no be possible for the other player to cancel the game", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(5005);
             return expect(RPS.cancelGame(gameId, secret, 2, {from: player2})).to.be.rejected;
         });
@@ -343,44 +348,40 @@ contract('RPS', function(accounts) {
         });
 
         it("Should not be possible to cancel the game if the player has joined", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(5005);
             return expect(RPS.cancelGame(gameId, secret, 2, {from: player1})).to.be.rejected;
         });
 
         it("Should be possible for the 2nd player to finish the game if after 10 mins " +
             "the host hasn't done so", async function () {
-            await expect(RPS.joinGame(gameId, 3, false, {from: player2, value: bet})).to.be.fulfilled;
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
             await timeMachine.advanceTimeAndBlock(605);
             return expect(RPS.soreLoser(gameId, {from: player2})).fulfilled;
         });
 
         it("Should be possible for another player to finish the game by calling " +
             "sore loser if the player wants", async function () {
-            await expect(RPS.joinGame(gameId, 3, true, {from: player2, value: bet})).to.be.fulfilled;
-            await timeMachine.advanceTimeAndBlock(605);
+            await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
+            await timeMachine.advanceTimeAndBlock(87005);
             return expect(RPS.soreLoser(gameId, {from: player3})).fulfilled;
         });
 
         it("Should have correct game outcomes", async function () {
-            await expect(RPS.runGameLogic(1, 1)).to.eventually.be.a.bignumber.equal(new BN(0));
-            await expect(RPS.runGameLogic(1, 2)).to.eventually.be.a.bignumber.equal(new BN(2));
-            await expect(RPS.runGameLogic(1, 3)).to.eventually.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(2, 1)).to.eventually.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(2, 2)).to.eventually.be.a.bignumber.equal(new BN(0));
-            await expect(RPS.runGameLogic(2, 3)).to.eventually.be.a.bignumber.equal(new BN(2));
-            await expect(RPS.runGameLogic(3, 1)).to.eventually.be.a.bignumber.equal(new BN(2));
-            await expect(RPS.runGameLogic(3, 2)).to.eventually.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(3, 3)).to.eventually.be.a.bignumber.equal(new BN(0));
-            await expect(RPS.runGameLogic(1, 1)).to.eventually.not.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(1, 2)).to.eventually.not.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(1, 3)).to.eventually.not.be.a.bignumber.equal(new BN(2));
-            await expect(RPS.runGameLogic(2, 1)).to.eventually.not.be.a.bignumber.equal(new BN(2));
-            await expect(RPS.runGameLogic(2, 2)).to.eventually.not.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(2, 3)).to.eventually.not.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(3, 1)).to.eventually.not.be.a.bignumber.equal(new BN(1));
-            await expect(RPS.runGameLogic(3, 2)).to.eventually.not.be.a.bignumber.equal(new BN(0));
-            return expect(RPS.runGameLogic(3, 3)).to.eventually.not.be.a.bignumber.equal(new BN(2));
+            const checks = [
+                    { left: rock, right: rock, outcome: draw},
+                    { left: rock, right: paper, outcome: rightWin},
+                    { left: rock, right: scissors, outcome: leftWin},
+                    { left: paper, right: rock, outcome: leftWin},
+                    { left: paper, right: paper, outcome: draw},
+                    { left: paper, right: scissors, outcome: rightWin},
+                    { left: scissors, right: rock, outcome: rightWin},
+                    { left: scissors, right: paper, outcome: leftWin},
+                    { left: scissors, right: scissors, outcome: draw}
+            ].map(setup => expect(
+                RPS.runGameLogic(setup.left, setup.right))
+                .to.eventually.be.a.bignumber.equal(new BN(setup.outcome)));
+            return Promise.all(checks);
         });
     });
 });

@@ -30,8 +30,6 @@ contract RockPaperScissors is Pausable {
        Moves playerMove;
        uint deadline;
        uint bet;
-       // Lets others finsih the game on the plyers behalf
-       bool openAdmin;
     }
 
     /// Holds players winnings
@@ -125,12 +123,13 @@ contract RockPaperScissors is Pausable {
                 require(hostBalance.add(paid) >= wager, 'Not enough ether to host game');
                 balances[msg.sender] = hostBalance.sub(wager.sub(paid)); 
                 emit LogBalanceWithdrawn(msg.sender, gameFee);
-            } else if (paid > wager) {
+            } else {
                 balances[msg.sender] = hostBalance.add(paid.sub(wager)); 
                 emit LogBalanceDeposited(msg.sender, gameFee);
             }
+        } else {
+            // pass
         }
-        
 
         uint gameDeadline = now.add(gameTime);
         games[gameId].deadline = gameDeadline;
@@ -153,7 +152,7 @@ contract RockPaperScissors is Pausable {
     /// @dev player can either send ether matching the wager + gameFee 
     /// or use previous winnings to join the game. Game fees
     /// are deducted at this point
-    function joinGame(bytes32 gameId, Moves move, bool allowAdmin)
+    function joinGame(bytes32 gameId, Moves move)
         whenRunning
         onlyPlayer(gameId)
         validMove(move)
@@ -174,16 +173,17 @@ contract RockPaperScissors is Pausable {
             if (paid < wager) {
                 balances[msg.sender] = playerBalance.sub(wager.sub(paid));
                 emit LogBalanceWithdrawn(msg.sender, gameFee);
-            } else if (paid > wager) {
+            } else {
                 balances[msg.sender] = playerBalance.add(paid.sub(wager));
                 emit LogBalanceDeposited(msg.sender, gameFee);
             } 
+        } else {
+            // pass
         }
         
         uint newDeadline = now.add(PLAY_TIME);
         games[gameId].playerMove = move;
         games[gameId].deadline = newDeadline; 
-        games[gameId].openAdmin = allowAdmin; 
 
         emit LogPlayerJoined(gameId, msg.sender, wager, newDeadline);
 
@@ -271,13 +271,11 @@ contract RockPaperScissors is Pausable {
     {
         require(games[gameId].playerMove != Moves.NONE, 'player needs to join game');
         require(now >= games[gameId].deadline, 'Host still has time to resolve the game');
-        require(msg.sender != games[gameId].host, 'host can not resolve the game anymore'); 
-        if (!games[gameId].openAdmin) {
-             require(msg.sender == games[gameId].player, 'Only player can resolve the game');   
-        }
+        address player = games[gameId].player;
+        require(msg.sender == player || now > games[gameId].deadline.add(MAX_GAMETIME), 'Game has not expired');
+
         uint payout = games[gameId].bet.mul(2);
         address host = games[gameId].host;
-        address player = games[gameId].player;
 
         delete games[gameId];
 
@@ -318,18 +316,7 @@ contract RockPaperScissors is Pausable {
     view
     returns (gameOutcome _outcome)
     {
-        uint leftMoveCheck = uint(left);
-        uint rightMoveCheck = uint(right).mod(3);
-
-        if (leftMoveCheck.mod(3) == rightMoveCheck) {
-        } else {
-            if (leftMoveCheck == rightMoveCheck + 1) {
-                _outcome = gameOutcome.HOST_WIN;
-            } else {
-                _outcome = gameOutcome.PLAYER_WIN;
-            }
-        }
-        return _outcome;
+        return gameOutcome((uint(left) + 3 - uint(right)) % 3);
     }
 
     /// Generate a unique id for a game
