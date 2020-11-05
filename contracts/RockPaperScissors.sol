@@ -22,6 +22,9 @@ contract RockPaperScissors is Pausable {
     // considered a forfeit (by the host) and the 2nd player
     // can claim the wager
 	uint16 public constant PLAY_TIME = 600 seconds;
+    // amount of original price any 3rd party gets for
+    // completing the game
+    uint public constant claimRewardFactor = 10;
     uint public gameFee;
 
     struct GameInfo {
@@ -280,7 +283,7 @@ contract RockPaperScissors is Pausable {
         delete games[gameId];
 
         if (msg.sender != player) {
-            uint fee = payout.div(10);
+            uint fee = payout.div(claimRewardFactor);
             payout = payout.sub(fee);
             balances[msg.sender] = balances[msg.sender].add(fee);
             emit LogBalanceDeposited(msg.sender, fee);
