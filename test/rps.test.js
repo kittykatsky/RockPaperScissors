@@ -130,12 +130,12 @@ contract('RPS', function(accounts) {
 
         it("Should not be possible to lie about your move", async function () {
             await expect(RPS.joinGame(gameId, 3, {from: player2, value: bet})).to.be.fulfilled;
-            return expect(RPS.playGame(secret, 3, {from: player1})).to.be.rejected;
+            return expect(RPS.playGame(player1, secret, 3, {from: player1})).to.be.rejected;
         });
 
         it("Should be possible to play the game", async function () {
             await expect(RPS.joinGame(gameId, scissors, {from: player2, value: bet})).to.be.fulfilled;
-            return await RPS.playGame(secret, paper, {from: player1});
+            return await RPS.playGame(player1, secret, paper, {from: player1});
         });
 
         it("Should add the wager to the winners balance", async function () {
@@ -145,7 +145,7 @@ contract('RPS', function(accounts) {
             assert.strictEqual(winnerBalanceBefore.toString(), '0');
             assert.strictEqual(loserBalanceBefore.toString(), '0');
 
-            await RPS.playGame(secret, paper, {from: player1});
+            await RPS.playGame(player1, secret, paper, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
             const loserBalanceAfter = await RPS.balances(player1);
@@ -157,7 +157,7 @@ contract('RPS', function(accounts) {
         it("Should split the wager between the players in the case of draw", async function () {
             await expect(RPS.joinGame(gameId, paper, {from: player2, value: bet})).to.be.fulfilled;
 
-            await RPS.playGame(secret, paper, {from: player1});
+            await RPS.playGame(player1, secret, paper, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
             const loserBalanceAfter = await RPS.balances(player1);
@@ -219,7 +219,7 @@ contract('RPS', function(accounts) {
 
         it("Should be possible to verify the outcome of a game", async function () {
             await expect(RPS.joinGame(gameId, scissors, {from: player2, value: bet})).to.be.fulfilled;
-            const trx = await RPS.playGame(secret, paper, {from: player1});
+            const trx = await RPS.playGame(player1, secret, paper, {from: player1});
 
             truffleAssert.eventEmitted(trx, 'LogGameFinished', (ev) => {
                 return ev.gameId === gameId
@@ -232,7 +232,7 @@ contract('RPS', function(accounts) {
 
         it("Should be possible to verify a player has withdraw funds", async function () {
             await expect(RPS.joinGame(gameId, scissors, {from: player2, value: bet})).to.be.fulfilled;
-            await expect(RPS.playGame(secret, paper, {from: player1})).to.be.fulfilled;
+            await expect(RPS.playGame(player1, secret, paper, {from: player1})).to.be.fulfilled;
             const trx = await RPS.withdrawFunds(9000, {from: player2});
 
             truffleAssert.eventEmitted(trx, 'LogBalanceWithdrawn', (ev) => {
@@ -271,7 +271,7 @@ contract('RPS', function(accounts) {
         it("Should allow user to bet their previous winnings", async function () {
             await expect(RPS.joinGame(gameId, scissors, {from: player2, value: bet})).to.be.fulfilled;
 
-            await RPS.playGame(secret, paper, {from: player1});
+            await RPS.playGame(player1, secret, paper, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
             const loserBalanceAfter = await RPS.balances(player1);
@@ -290,7 +290,7 @@ contract('RPS', function(accounts) {
             const winnerBalanceBefore = await RPS.balances(player2);
             const loserBalanceBefore = await RPS.balances(player1);
 
-            await RPS.playGame(secret, paper, {from: player1});
+            await RPS.playGame(player1, secret, paper, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
             const loserBalanceAfter = await RPS.balances(player1);
@@ -303,7 +303,7 @@ contract('RPS', function(accounts) {
 
         it("Should allow user to withdraw their winnings", async function () {
             await expect(RPS.joinGame(gameId, scissors, {from: player2, value: bet})).to.be.fulfilled;
-            await RPS.playGame(secret, paper, {from: player1});
+            await RPS.playGame(player1, secret, paper, {from: player1});
 
             const winnerBalanceAfter = await RPS.balances(player2);
             const loserBalanceAfter = await RPS.balances(player1);

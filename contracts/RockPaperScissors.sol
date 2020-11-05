@@ -201,16 +201,17 @@ contract RockPaperScissors is Pausable {
     /// @param hostMove hosts move
     /// @dev plays the game, decides the winner, game data 
     /// is cleared out, saving the caller some gas
-    function playGame(bytes32 secret, Moves hostMove)
+    function playGame(address host, bytes32 secret, Moves hostMove)
         whenRunning
         external
     {   
-        bytes32 gameId = generateGameId(msg.sender, secret, hostMove);
+
+        bytes32 gameId = generateGameId(host, secret, hostMove);
+        address player = games[gameId].player;
         Moves playerMove = games[gameId].playerMove;
 
         require(playerMove != Moves.NONE, 'Player hasnt joined');
         
-        address player = games[gameId].player;
         uint wager = games[gameId].bet;
         
         /// clear out struct to save some gas
@@ -221,18 +222,18 @@ contract RockPaperScissors is Pausable {
 
         gameOutcome outcome = runGameLogic(hostMove, playerMove);
         if (outcome == gameOutcome.DRAW) {
-            balances[msg.sender] = balances[msg.sender].add(wager);  
+            balances[host] = balances[host].add(wager);  
             balances[player] = balances[player].add(wager);  
-            emit LogBalanceDeposited(msg.sender, wager);
+            emit LogBalanceDeposited(host, wager);
             emit LogBalanceDeposited(player, wager);
         } else if (outcome == gameOutcome.HOST_WIN) {
-            balances[msg.sender] = balances[msg.sender].add(wager.mul(2));  
-            emit LogBalanceDeposited(msg.sender, wager.mul(2));
+            balances[host] = balances[host].add(wager.mul(2));  
+            emit LogBalanceDeposited(host, wager.mul(2));
         } else {
             balances[player] = balances[player].add(wager.mul(2));  
             emit LogBalanceDeposited(player, wager.mul(2));
         }
-        emit LogGameFinished(gameId, msg.sender, player, outcome, wager.mul(2));
+        emit LogGameFinished(gameId, host, player, outcome, wager.mul(2));
     }
 
     /// Cancel a hosted game
