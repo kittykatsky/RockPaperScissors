@@ -208,6 +208,7 @@ contract RockPaperScissors is Pausable {
 
         bytes32 gameId = generateGameId(host, secret, hostMove);
         address player = games[gameId].player;
+        address host = games[gameId].host;
         Moves playerMove = games[gameId].playerMove;
 
         require(playerMove != Moves.NONE, 'Player hasnt joined');
